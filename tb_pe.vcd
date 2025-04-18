@@ -1,0 +1,71 @@
+$date
+	Fri Apr 18 14:00:58 2025
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1ps
+$end
+$scope module tb_pe $end
+$var wire 32 ! psum_out [31:0] $end
+$var reg 1 " clk $end
+$var reg 16 # image_val [15:0] $end
+$var reg 32 $ psum_in [31:0] $end
+$var reg 1 % rst $end
+$var reg 16 & weight_val [15:0] $end
+$scope module dut $end
+$var wire 1 " clk $end
+$var wire 16 ' image_val [15:0] $end
+$var wire 32 ( psum_in [31:0] $end
+$var wire 1 % rst $end
+$var wire 16 ) weight_val [15:0] $end
+$var reg 32 * psum_out [31:0] $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$comment Show the parameter values. $end
+$dumpall
+$end
+#0
+$dumpvars
+b0 *
+b0 )
+b0 (
+b0 '
+b0 &
+1%
+b0 $
+b0 #
+0"
+b0 !
+$end
+#5000
+1"
+#10000
+0"
+b1010 $
+b1010 (
+b11 &
+b11 )
+b10 #
+b10 '
+0%
+#15000
+b10000 !
+b10000 *
+1"
+#20000
+0"
+b10000 $
+b10000 (
+b101 &
+b101 )
+b100 #
+b100 '
+#25000
+b100100 !
+b100100 *
+1"
+#30000
+0"

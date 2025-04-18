@@ -1,0 +1,78 @@
+$date
+	Fri Apr 18 14:01:19 2025
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1ps
+$end
+$scope module tb_multicast_router $end
+$var parameter 32 ! DATA_WIDTH $end
+$var parameter 32 " ID_WIDTH $end
+$var parameter 32 # PE_COUNT $end
+$var reg 1 $ clk $end
+$var reg 16 % in_val [15:0] $end
+$var reg 1 & in_valid $end
+$var reg 1 ' rst $end
+$var reg 4 ( tag_id [3:0] $end
+$scope module dut $end
+$var wire 1 $ clk $end
+$var wire 16 ) in_val [15:0] $end
+$var wire 1 & in_valid $end
+$var wire 1 ' rst $end
+$var wire 4 * tag_id [3:0] $end
+$var parameter 32 + DATA_WIDTH $end
+$var parameter 32 , ID_WIDTH $end
+$var parameter 32 - PE_COUNT $end
+$scope begin PE_MATCH[0] $end
+$var parameter 2 . i $end
+$upscope $end
+$scope begin PE_MATCH[1] $end
+$var parameter 2 / i $end
+$upscope $end
+$scope begin PE_MATCH[2] $end
+$var parameter 3 0 i $end
+$upscope $end
+$scope begin PE_MATCH[3] $end
+$var parameter 3 1 i $end
+$upscope $end
+$scope begin PE_MATCH[4] $end
+$var parameter 4 2 i $end
+$upscope $end
+$upscope $end
+$scope begin $ivl_for_loop0 $end
+$var integer 32 3 i [31:0] $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$comment Show the parameter values. $end
+$dumpall
+b100 2
+b11 1
+b10 0
+b1 /
+b0 .
+b101 -
+b100 ,
+b10000 +
+b101 #
+b100 "
+b10000 !
+$end
+#0
+$dumpvars
+b0 3
+b10 *
+b1011111011101111 )
+b10 (
+0'
+1&
+b1011111011101111 %
+0$
+$end
+#5000
+1$
+#10000
+0$
+b101 3
