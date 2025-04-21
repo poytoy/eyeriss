@@ -37,47 +37,49 @@ module tb_pe_grid_12x14;
     integer i;
 
     initial begin
-        $dumpfile("pe_grid.vcd");
-        $dumpvars(0, tb_pe_grid_12x14);
-        $display("== PE Grid Test Begin ==");
+        $display("== PE Grid Vertical Propagation Test Begin ==");
 
-        // Reset
+        // Apply reset
         rst = 1;
+        valid_x = 0;
+        valid_y = 0;
         image_val_in = 0;
         weight_val_in = 0;
         tag_col = 0;
         tag_row = 0;
-        valid_x = 0;
-        valid_y = 0;
 
+        // Initialize all psum inputs to zero
         for (i = 0; i < 14; i = i + 1)
-            psum_ins[i] = 0;
+            psum_ins[i] = 32'd0;
 
-        #10;
+        #20;
         rst = 0;
 
-        // Send activation and weight to PE[3][5]
-        image_val_in = 16'd4;
-        tag_col      = 4'd5;
-        valid_x      = 1;
-
-        weight_val_in = 16'd10;
-        tag_row       = 4'd3;
+        // === Activate only PE[2][2] ===
+        // Send weight to row 2
+        weight_val_in = 16'd3;
+        tag_row       = 4'd2;
         valid_y       = 1;
+
+        // Send image to column 2
+        image_val_in  = 16'd30;
+        tag_col       = 4'd2;
+        valid_x       = 1;
 
         #10;
         valid_x = 0;
         valid_y = 0;
 
-        // Wait a few cycles for value to propagate up
-        #50;
+        // Wait for value to propagate up to psum_outs[2]
+        #100;
 
-        $display(">> psum_outs[5] = %0d (expected 40)", psum_outs[5]);
+        // Check result
+        $display("\n== psum_outs[2] = %0d (expected: 90) ==", psum_outs[2]);
 
-        if (psum_outs[5] == 32'd40)
-            $display("✅ PASS");
+        if (psum_outs[2] == 90)
+            $display("✅ SUCCESS: Vertical accumulation works.");
         else
-            $display("❌ FAIL");
+            $display("❌ FAILURE: psum_outs[2] incorrect!");
 
         $finish;
     end
