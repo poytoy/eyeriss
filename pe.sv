@@ -9,16 +9,26 @@ module pe (
     output logic [31:0] psum_out     // output partial sum
 );
  //IMPLEMENT
-//very basic impl.
+//determining the next psum_out 
 always_ff @(posedge clk or posedge rst) begin
-    if (rst) begin
-        psum_out <= 0;
-    end else if (image_en && weight_en) begin
-        psum_out <= psum_in + image_val * weight_val;
-    end else begin
-        psum_out <= psum_in;
+        if (rst) begin
+            psum_out <= 0;
+        end else if (image_en && weight_en) begin
+            psum_out <= psum_in + image_val * weight_val;
+        end else begin
+            psum_out <= psum_in; //  Forward directly
+        end
     end
+always_ff @(posedge clk or posedge rst) begin
+
+     // Debug display on every cycle
+    if (image_en && weight_en) begin
+    $display(" @%0t | MAC: %0d * %0d + %0d = %0d | image_en=%b weight_en=%b",
+              $time, image_val, weight_val, psum_in, image_val * weight_val + psum_in,
+             image_en, weight_en);
+end else if (psum_in != 0 || psum_out != 0) begin
+    $display(" @%0t | Forward: psum_in=%0d → psum_out=%0d",
+              $time, psum_in, psum_out);
 end
-
-
+end 
 endmodule
