@@ -15,6 +15,8 @@ module tb_pe_grid_12x14;
 
     reg  [31:0] psum_ins  [0:13];
     wire [31:0] psum_outs [0:13];
+    reg [15:0] image_data  [0:35];  // 6x6
+    reg [15:0] kernel_data [0:35];  // 6x6
 
     // Instantiate the DUT
     PE_Grid_12x14 dut (
@@ -36,10 +38,13 @@ module tb_pe_grid_12x14;
 
     integer i;
 
-    initial begin
-        $display("== PE Grid Vertical Propagation Test Begin ==");
+initial begin
+        $display("== PE Grid 6x6 Image × 6x6 Kernel Test Begin ==");
 
-        // Apply reset
+        // Load input data
+        $readmemh("image_fp16_1.mem", image_data);
+        $readmemh("kernel_fp16_1.mem", kernel_data);
+        // Reset and init
         rst = 1;
         valid_x = 0;
         valid_y = 0;
@@ -48,30 +53,34 @@ module tb_pe_grid_12x14;
         tag_col = 0;
         tag_row = 0;
 
-        // Initialize all psum inputs to zero
         for (i = 0; i < 14; i = i + 1)
             psum_ins[i] = 32'd0;
 
-        #20;
+        repeat (2) @(posedge clk);  // 2 cycles of reset
         rst = 0;
 
-        // === Activate only PE[2][2] ===
-        // Send weight to row 2
-        weight_val_in = 16'd3;
-        tag_row       = 4'd2;
-        valid_y       = 1;
+        // === First MAC: PE[4][5] => 10 × 1 ===
+        // === Feed the 6x6 image and kernel into the array ===
+     for (int t = 0; t < 6; t++) begin
+    // Send 6 image vals at row t to cols 0-5
+    for (int c = 0; c < 6; c++) begin
+        image_val_in = image_data[t * 6 + c];
+        tag_col = c;
+        valid_x = 1;
 
-        // Send image to column 2
-        image_val_in  = 16'd30;
-        tag_col       = 4'd2;
-        valid_x       = 1;
+        // Simultaneously, send 6 kernel vals at col t to rows 0-5
+        weight_val_in = kernel_data[t * 6 + c];  // t is column index
+        tag_row = c;
+        valid_y = 1;
 
-        #10;
+        @(posedge clk);
+
         valid_x = 0;
         valid_y = 0;
-
-        // Wait for value to propagate up to psum_outs[2]
-        #100;
+    end
+end
+        // Wait for accumulation to reach top row
+        repeat (10) @(posedge clk);
 
         $finish;
     end
