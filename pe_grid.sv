@@ -37,7 +37,7 @@ module PE_Grid_12x14 (
     ) x_router (
         .clk(clk), .rst(rst),
         .in_val(image_val_in),
-        .tag_id(tag_col),            // ✅ fixed
+        .tag_id(tag_col),            // fixed
         .in_valid(valid_x),
         .pe_ids(col_ids),
         .out_vals(x_vals),
