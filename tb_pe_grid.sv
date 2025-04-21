@@ -77,9 +77,9 @@ module tb_pe_grid_12x14;
         $display("\n== psum_outs[2] = %0d (expected: 90) ==", psum_outs[2]);
 
         if (psum_outs[2] == 90)
-            $display("✅ SUCCESS: Vertical accumulation works.");
+            $display(" SUCCESS: Vertical accumulation works.");
         else
-            $display("❌ FAILURE: psum_outs[2] incorrect!");
+            $display(" FAILURE: psum_outs[2] incorrect!");
 
         $finish;
     end
