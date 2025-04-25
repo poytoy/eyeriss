@@ -1,2 +1,2 @@
 # eyeriss
-Multicasting is not fix to inject row in the same clock cycle
+Multicasting is not fix yet to inject row in the same clock cycle
