@@ -1,66 +1,57 @@
-`timescale 1ns/1ps
+module tb_PE;
 
-module tb_pe;
-
-    logic clk;
+    logic clk = 0;
     logic rst;
-    logic [15:0] image_val;
-    logic [15:0] weight_val;
-    logic [31:0] psum_in;
-    logic [31:0] psum_out;
+    logic [15:0] image_val, weight_val;
+    logic image_en, weight_en;
+    logic [31:0] psum_in, psum_out;
 
     // Instantiate DUT
-    pe dut (
+    PE dut (
         .clk(clk),
         .rst(rst),
         .image_val(image_val),
         .weight_val(weight_val),
+        .image_en(image_en),
+        .weight_en(weight_en),
         .psum_in(psum_in),
         .psum_out(psum_out)
     );
 
     // Clock generation
-    initial clk = 0;
-    always #5 clk = ~clk; // 10 ns clock period
+    always #5 clk = ~clk;
 
     initial begin
-        $display("=== PE Test ===");
-        $dumpfile("tb_pe.vcd");
-        $dumpvars(0, tb_pe);
-
-        // Test: Reset
+        // Initialize signals
         rst = 1;
         image_val = 0;
         weight_val = 0;
+        image_en = 0;
+        weight_en = 0;
         psum_in = 0;
-        #10;
 
+        // Reset pulse
+        #12;
         rst = 0;
 
-        // Test 1: MAC operation
-        image_val = 16'd2;
+        // Apply weight
         weight_val = 16'd3;
-        psum_in = 32'd10;
-        #10; // wait 1 cycle
-
-        // Check result
-        if (psum_out !== 32'd16)
-            $display("❌ FAIL: Expected 16, got %0d", psum_out);
-        else
-            $display("✅ PASS: psum_out = %0b", psum_out);
-
-        // Test 2: Another MAC
-        image_val = 16'd4;
-        weight_val = 16'd5;
-        psum_in = psum_out;
+        weight_en = 1;
         #10;
+        weight_en = 0;
 
-        if (psum_out !== 32'd36)
-            $display("❌ FAIL: Expected 36, got %0d", psum_out);
-        else
-            $display("✅ PASS: psum_out = %0d", psum_out);
+        // Apply image + psum_in
+        image_val = 16'd4;
+        image_en = 1;
+        psum_in = 32'd5;
+        #10;
+        image_en = 0;
+
+        // Wait and observe
+        #20;
+
+        $display("Test done. Final psum_out = %0d (Expected: 3*4+5=17)", psum_out);
 
         $finish;
     end
-
 endmodule

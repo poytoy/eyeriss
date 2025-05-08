@@ -1,24 +1,46 @@
-module pe (
+module pe_inst (
     input  logic        clk,
     input  logic        rst,
-    input  logic [15:0] image_val,   // image activation
+    input  logic signed [15:0] image_val,   // Q7.8
+    input  logic signed [15:0] weight_val,  // Q7.8
     input  logic        image_en,
-    input  logic [15:0] weight_val,  // filter weight
     input  logic        weight_en,
-    input  logic [31:0] psum_in,     // incoming partial sum
-    output logic [31:0] psum_out     // output partial sum
+    input  logic signed [15:0] psum_in,     // Q7.8
+    output logic signed [15:0] psum_out     // Q7.8
 );
- //IMPLEMENT
-//very basic impl.
-always_ff @(posedge clk or posedge rst) begin
-    if (rst) begin
-        psum_out <= 0;
-    end else if (image_en && weight_en) begin
-        psum_out <= psum_in + image_val * weight_val;
-    end else begin
-        psum_out <= psum_in;
-    end
-end
 
+    logic signed [15:0] weight_reg;
+    logic signed [15:0] mul_out;
+    logic signed [15:0] add_out;
+
+    // Register weight
+    always_ff @(posedge clk or posedge rst) begin
+        if (rst)
+            weight_reg <= 16'sd0;
+        else if (weight_en)
+            weight_reg <= weight_val;
+    end
+
+    // Instantiate Q7.8 multiplier
+    fxp16_mul_q7_8 mul_inst (
+        .a(image_val),
+        .b(weight_reg),
+        .p(mul_out)
+    );
+
+    // Instantiate Q7.8 adder
+    fxp16_add_q7_8 add_inst (
+        .a(mul_out),
+        .b(psum_in),
+        .s(add_out)
+    );
+
+    // Output logic
+    always_comb begin
+        if (image_en)
+            psum_out = add_out;
+        else
+            psum_out = psum_in;
+    end
 
 endmodule
