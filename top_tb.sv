@@ -6,8 +6,6 @@ module tb_main;
     reg clk = 0;
     reg rst = 1;
 
-    // Wires to tap into the design for observation
-    wire [31:0] psum_outs [0:13];
 
     // Instantiate the DUT (top-level main module)
     main uut();
