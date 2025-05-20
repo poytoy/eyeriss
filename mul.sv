@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module mul (
     input  logic signed [15:0] a, // Q7.8
     input  logic signed [15:0] b, // Q7.8
