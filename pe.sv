@@ -22,14 +22,14 @@ module pe_inst (
     end
 
     // Instantiate Q7.8 multiplier
-    fxp16_mul_q7_8 mul_inst (
+    mul mul_inst (
         .a(image_val),
         .b(weight_reg),
         .p(mul_out)
     );
 
     // Instantiate Q7.8 adder
-    fxp16_add_q7_8 add_inst (
+    add add_inst (
         .a(mul_out),
         .b(psum_in),
         .s(add_out)
@@ -41,6 +41,19 @@ module pe_inst (
             psum_out = add_out;
         else
             psum_out = psum_in;
+    end
+
+    // Debug display logic (only on positive clock edge)
+    always_ff @(posedge clk) begin
+        if (psum_out) begin
+            $display("PE Calculation:");
+            $display("  image_val  = %0d (Q7.8)", image_val);
+            $display("  weight_reg = %0d (Q7.8)", weight_reg);
+            $display("  mul_out    = %0d (Q7.8)", mul_out);
+            $display("  psum_in    = %0d (Q7.8)", psum_in);
+            $display("  psum_out   = %0d (Q7.8)", psum_out);
+            $display("-------------------------------");
+        end
     end
 
 endmodule
