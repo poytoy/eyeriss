@@ -14,7 +14,7 @@ module PE_Grid_12x14 (
     output logic [31:0] psum_outs  [0:13]
 );
 
-    logic [31:0] psum_wires[0:12][0:13];
+    logic [15:0] psum_wires[0:12][0:13];
 
     genvar i;
     generate
@@ -23,7 +23,10 @@ module PE_Grid_12x14 (
             assign psum_outs[i]      = psum_wires[0][i];
         end
     endgenerate
-
+/*
+    reg [3:0] col_ids [13:0];
+    reg [15:0] x_vals [13:0];
+    reg x_en [13:0];
     // Routers
     MulticastRouter #(
         .PE_COUNT(14), .DATA_WIDTH(16), .ID_WIDTH(4)
@@ -36,7 +39,7 @@ module PE_Grid_12x14 (
         .out_vals(x_vals),
         .out_valids(x_en)
     );
-
+*/
     genvar r, c;
     generate
         for (r = 0; r < 12; r++) begin: row_loop
@@ -63,7 +66,7 @@ module PE_Grid_12x14 (
                     .out_valid(weight_en)
                 );
 
-                pe pe_inst (
+                pe_inst pe (
                     .clk(clk),
                     .rst(rst),
                     .image_val(image_wire),
