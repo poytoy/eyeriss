@@ -1,336 +1,140 @@
-// Eyeriss Top-Level Controller FSM
-// For poytoy/eyeriss implementation
-// Based on CSE550.Eyeriss.pdf paper
+`timescale 1ns/1ps
 
-module eyeriss_controller (
-    input  logic clk,
-    input  logic rst,
-    
-    // Configuration and control signals
-    input  logic start_compute,
-    input  logic [7:0] num_rows,         // Number of rows in the input
-    input  logic [7:0] num_cols,         // Number of columns in the input
-    input  logic [7:0] filter_size,      // Filter size (assuming square filter)
-    
-    // Memory interface signals
-    output logic mem_rd_en,
-    output logic [15:0] mem_rd_addr,
-    input  logic [15:0] mem_rd_data,
-    
-    // Weight buffer control
-    output logic weight_load_en,
-    output logic [3:0] weight_row_id,
-    output logic [15:0] weight_data [0:13],
-    output logic weight_valid,
-    
-    // Input feature map control
-    output logic ifmap_load_en,
-    output logic [15:0] ifmap_data [0:13],
-    output logic [13:0] ifmap_valid_vec,
-    
-    // Output psum control
-    input  logic [31:0] psum_out [0:13],
-    output logic [31:0] psum_in [0:13],
-    
-    // Status signals
-    output logic compute_done
-);
+// Synthesizable, top-level module with a basic FSM and hardcoded image/kernel data.
+// No inputs/outputs. On reset, loads a 6x6 kernel and 6x6 image into a 12x14 PE grid.
 
-    // FSM state definitions
-    typedef enum logic [3:0] {
-        IDLE,
-        LOAD_WEIGHTS,
-        LOAD_IFMAP_ROW,
-        COMPUTE_ROW,
-        NEXT_ROW,
-        STORE_RESULTS,
-        DONE
+module main;
+
+    // Clock and reset
+    reg clk = 0;
+    reg rst = 1;
+
+    // PE grid connections
+    reg  [15:0] image_val_vec [0:13];
+    reg         valid_x_vec   [0:13];
+    reg  [15:0] row_weight_vals [0:13];
+    reg  [3:0]  tag_row;
+    reg         valid_y;
+    reg  [31:0] psum_ins [0:13];
+    wire [31:0] psum_outs [0:13];
+
+    // Hardcoded memory for image and kernel (6x6 each)
+    localparam int IMG_W = 6, IMG_H = 6;
+    localparam int GRID_COLS = 14;
+    localparam int GRID_ROWS = 12;
+
+    // Example: image and kernel are all 1s for demonstration
+    logic [15:0] image_data  [0:IMG_W*IMG_H-1];
+    logic [15:0] kernel_data [0:IMG_W*IMG_H-1];
+
+    // FSM state encoding
+    typedef enum logic [2:0] {
+        S_RESET,
+        S_LOAD_KERNEL,
+        S_WAIT_KERNEL,
+        S_IMAGE_ROW,
+        S_WAIT_IMAGE,
+        S_DONE
     } state_t;
-    
-    state_t current_state, next_state;
-    
-    // Internal counters and registers
-    logic [7:0] row_counter;
-    logic [7:0] col_counter;
-    logic [7:0] weight_row_counter;
-    logic [7:0] compute_cycles;
-    logic [15:0] weight_addr_base;
-    logic [15:0] ifmap_addr_base;
-    logic [15:0] result_addr_base;
-    
-    // State transition logic
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            current_state <= IDLE;
-            row_counter <= 0;
-            col_counter <= 0;
-            weight_row_counter <= 0;
-            compute_cycles <= 0;
-            weight_addr_base <= 0;
-            ifmap_addr_base <= 0;
-            result_addr_base <= 0;
-        end else begin
-            current_state <= next_state;
-            
-            case (current_state)
-                IDLE: begin
-                    if (start_compute) begin
-                        // Reset counters and prepare for computation
-                        row_counter <= 0;
-                        col_counter <= 0;
-                        weight_row_counter <= 0;
-                        compute_cycles <= 0;
-                        // Set up memory base addresses (could be configured externally)
-                        weight_addr_base <= 16'h0000;  // Weights start at address 0
-                        ifmap_addr_base <= 16'h1000;   // Input feature maps start at 0x1000
-                        result_addr_base <= 16'h2000;  // Results will be stored at 0x2000
-                    end
+    state_t state = S_RESET;
+    int r, c;
+
+    // Instantiate PE grid
+    PE_Grid_12x14 dut (
+        .clk(clk),
+        .rst(rst),
+        .image_val_vec(image_val_vec),
+        .valid_x_vec(valid_x_vec),
+        .row_weight_vals(row_weight_vals),
+        .tag_row(tag_row),
+        .valid_y(valid_y),
+        .psum_ins(psum_ins),
+        .psum_outs(psum_outs)
+    );
+
+    // Clock generation
+    always #5 clk = ~clk;
+
+    // Hardcoded image and kernel initialization (all 1s, change as needed)
+    initial begin
+        for (int i = 0; i < IMG_W*IMG_H; i = i + 1) begin
+            image_data[i] = 16'd1 + i;   // e.g. [1,2,3,...,36]
+            kernel_data[i] = 16'd1;      // e.g. all 1s
+        end
+    end
+
+    // Main FSM
+    initial begin
+        rst = 1;
+        valid_y = 0;
+        tag_row = 0;
+        for (int i = 0; i < GRID_COLS; i++) begin
+            image_val_vec[i] = 0;
+            valid_x_vec[i] = 0;
+            row_weight_vals[i] = 0;
+            psum_ins[i] = 0;
+        end
+
+        state = S_RESET;
+        r = 0;
+        c = 0;
+
+        repeat (2) @(posedge clk); // Allow reset to propagate
+        rst = 0;
+        state = S_LOAD_KERNEL;
+        r = 0;
+
+        forever @(posedge clk) begin
+            case (state)
+            S_LOAD_KERNEL: begin
+                // Load one row of kernel weights
+                for (c = 0; c < IMG_W; c = c + 1)
+                    row_weight_vals[c] = kernel_data[r*IMG_W + c];
+                for (c = IMG_W; c < GRID_COLS; c = c + 1)
+                    row_weight_vals[c] = 0;
+                tag_row = r[3:0];
+                valid_y = 1;
+                state = S_WAIT_KERNEL;
+            end
+            S_WAIT_KERNEL: begin
+                valid_y = 0;
+                if (r < IMG_H-1) begin
+                    r = r + 1;
+                    state = S_LOAD_KERNEL;
+                end else begin
+                    r = 0;
+                    state = S_IMAGE_ROW;
                 end
-                
-                LOAD_WEIGHTS: begin
-                    if (weight_row_counter < filter_size) begin
-                        weight_row_counter <= weight_row_counter + 1;
-                    end
+            end
+            S_IMAGE_ROW: begin
+                for (c = 0; c < IMG_W; c = c + 1) begin
+                    image_val_vec[c] = 16'h0100;
+                    valid_x_vec[c] = 1;
                 end
-                
-                LOAD_IFMAP_ROW: begin
-                    // No counter updates here, handled in next state
+                for (c = IMG_W; c < GRID_COLS; c = c + 1) begin
+                    image_val_vec[c] = 0;
+                    valid_x_vec[c] = 0;
                 end
-                
-                COMPUTE_ROW: begin
-                    compute_cycles <= compute_cycles + 1;
-                    if (compute_cycles >= filter_size - 1) begin
-                        compute_cycles <= 0;
-                    end
+                state = S_WAIT_IMAGE;
+            end
+            S_WAIT_IMAGE: begin
+                for (c = 0; c < GRID_COLS; c = c + 1) valid_x_vec[c] = 0;
+                if (r < IMG_H-1) begin
+                    r = r + 1;
+                    state = S_IMAGE_ROW;
+                end else begin
+                    state = S_DONE;
                 end
-                
-                NEXT_ROW: begin
-                    row_counter <= row_counter + 1;
-                    compute_cycles <= 0;
-                end
-                
-                STORE_RESULTS: begin
-                    // No counter updates here, handled in next state
-                end
-                
-                DONE: begin
-                    // Stay in DONE state until reset
-                end
+            end
+            S_DONE: begin
+                // Remain in done state; for simulation, you could $finish here
+                // but for synthesis, just idle
+                // For demo, can route output to chipscope/ILA, etc.
+                state = S_DONE;
+            end
+            default: state = S_DONE;
             endcase
         end
     end
-    
-    // Next state logic
-    always_comb begin
-        next_state = current_state; // Default: stay in current state
-        
-        case (current_state)
-            IDLE: begin
-                if (start_compute) begin
-                    next_state = LOAD_WEIGHTS;
-                end
-            end
-            
-            LOAD_WEIGHTS: begin
-                if (weight_row_counter >= filter_size - 1) begin
-                    next_state = LOAD_IFMAP_ROW;
-                end
-            end
-            
-            LOAD_IFMAP_ROW: begin
-                next_state = COMPUTE_ROW;
-            end
-            
-            COMPUTE_ROW: begin
-                if (compute_cycles >= filter_size - 1) begin
-                    next_state = STORE_RESULTS;
-                end
-            end
-            
-            STORE_RESULTS: begin
-                if (row_counter >= num_rows - filter_size) begin
-                    next_state = DONE;
-                end else begin
-                    next_state = NEXT_ROW;
-                end
-            end
-            
-            NEXT_ROW: begin
-                next_state = LOAD_IFMAP_ROW;
-            end
-            
-            DONE: begin
-                if (!start_compute) begin
-                    next_state = IDLE;
-                end
-            end
-        endcase
-    end
-    
-    // Output logic
-    always_comb begin
-        // Default values
-        mem_rd_en = 0;
-        mem_rd_addr = 0;
-        weight_load_en = 0;
-        weight_row_id = 0;
-        for (int i = 0; i < 14; i++) begin
-            weight_data[i] = 0;
-            ifmap_data[i] = 0;
-            psum_in[i] = 0;
-        end
-        weight_valid = 0;
-        ifmap_load_en = 0;
-        ifmap_valid_vec = 0;
-        compute_done = 0;
-        
-        case (current_state)
-            IDLE: begin
-                // Reset all outputs
-            end
-            
-            LOAD_WEIGHTS: begin
-                mem_rd_en = 1;
-                mem_rd_addr = weight_addr_base + weight_row_counter * filter_size;
-                weight_load_en = 1;
-                weight_row_id = weight_row_counter[3:0];
-                
-                // Set up weight data from memory read (assuming sequential reads)
-                // In real implementation, would need multiple clock cycles to load an entire row
-                for (int i = 0; i < filter_size; i++) begin
-                    weight_data[i] = mem_rd_data; // This is simplified; actual implementation would need memory pipelining
-                end
-                
-                weight_valid = 1;
-            end
-            
-            LOAD_IFMAP_ROW: begin
-                mem_rd_en = 1;
-                mem_rd_addr = ifmap_addr_base + (row_counter * num_cols);
-                ifmap_load_en = 1;
-                
-                // Set up ifmap data for the current row
-                for (int i = 0; i < filter_size; i++) begin
-                    ifmap_data[i] = mem_rd_data; // Simplified; would need multiple reads
-                end
-                
-                // Set valid signals for active columns
-                for (int i = 0; i < filter_size; i++) begin
-                    ifmap_valid_vec[i] = 1;
-                end
-            end
-            
-            COMPUTE_ROW: begin
-                // During computation, maintain the input validity signals
-                for (int i = 0; i < filter_size; i++) begin
-                    ifmap_valid_vec[i] = 1;
-                end
-                
-                // Initialize psum inputs to 0 for the first cycle
-                if (compute_cycles == 0) begin
-                    for (int i = 0; i < 14; i++) begin
-                        psum_in[i] = 0;
-                    end
-                end
-            end
-            
-            STORE_RESULTS: begin
-                // In a real implementation, would write psum_out back to memory
-                // For now, just signal computation is done for this row
-            end
-            
-            NEXT_ROW: begin
-                // Reset for next row processing
-            end
-            
-            DONE: begin
-                compute_done = 1;
-            end
-        endcase
-    end
-
-endmodule
-
-// Top-level integration of the Eyeriss accelerator
-module eyeriss_top (
-    input  logic clk,
-    input  logic rst,
-    input  logic start,
-    output logic done,
-    
-    // Memory interface (could be expanded to include external memory)
-    input  logic [15:0] mem_data_in,
-    output logic [15:0] mem_addr_out,
-    output logic mem_read_en,
-    output logic mem_write_en,
-    output logic [15:0] mem_data_out
-);
-
-    // Parameters for the neural network
-    localparam INPUT_SIZE = 6;         // 6x6 input feature map from MNIST
-    localparam FILTER_SIZE = 6;        // 6x6 filter
-    localparam PE_ROWS = 12;           // 12x14 PE array
-    localparam PE_COLS = 14;
-    
-    // Internal signals
-    logic [15:0] ifmap_data [0:PE_COLS-1];
-    logic [PE_COLS-1:0] ifmap_valid_vec;
-    logic [15:0] weight_data [0:PE_COLS-1];
-    logic [3:0] weight_row_id;
-    logic weight_valid;
-    logic [31:0] psum_in [0:PE_COLS-1];
-    logic [31:0] psum_out [0:PE_COLS-1];
-    
-    // Controller signals
-    logic controller_mem_rd_en;
-    logic [15:0] controller_mem_addr;
-    logic [15:0] controller_mem_data;
-    logic weight_load_en;
-    logic ifmap_load_en;
-    
-    // Instantiate the PE Grid
-    PE_Grid_12x14 pe_grid (
-        .clk(clk),
-        .rst(rst),
-        .image_val_vec(ifmap_data),
-        .valid_x_vec(ifmap_valid_vec),
-        .row_weight_vals(weight_data),
-        .tag_row(weight_row_id),
-        .valid_y(weight_valid),
-        .psum_ins(psum_in),
-        .psum_outs(psum_out)
-    );
-    
-    // Instantiate the controller
-    eyeriss_controller controller (
-        .clk(clk),
-        .rst(rst),
-        .start_compute(start),
-        .num_rows(INPUT_SIZE),
-        .num_cols(INPUT_SIZE),
-        .filter_size(FILTER_SIZE),
-        .mem_rd_en(controller_mem_rd_en),
-        .mem_rd_addr(controller_mem_addr),
-        .mem_rd_data(controller_mem_data),
-        .weight_load_en(weight_load_en),
-        .weight_row_id(weight_row_id),
-        .weight_data(weight_data),
-        .weight_valid(weight_valid),
-        .ifmap_load_en(ifmap_load_en),
-        .ifmap_data(ifmap_data),
-        .ifmap_valid_vec(ifmap_valid_vec),
-        .psum_out(psum_out),
-        .psum_in(psum_in),
-        .compute_done(done)
-    );
-    
-    // Memory interface
-    assign mem_read_en = controller_mem_rd_en;
-    assign mem_addr_out = controller_mem_addr;
-    assign controller_mem_data = mem_data_in;
-    
-    // For now, no write back to memory
-    assign mem_write_en = 0;
-    assign mem_data_out = 0;
 
 endmodule
