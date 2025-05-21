@@ -2,57 +2,58 @@
 
 module tb_main;
 
-    // Clock and reset
-    reg clk = 0;
-    reg rst = 1;
-
-
-    // Instantiate the DUT (top-level main module)
-    main uut();
-
-    // Connect for observing outputs
-    // If 'main' already declares psum_outs as wire, you may need to expose it via bind or interface
-    // Otherwise, you can modify 'main' to declare psum_outs as 'wire' and mark it as '(* keep *)' for visibility in simulation
+    logic clk;
+    logic rst;
+    logic btn_prev;
+    logic btn_edge;
+    logic [15:0] LED;
 
     // Clock generation
-        localparam int RESET_CYCLES = 3;
-    integer reset_counter = 0;
+    initial clk = 0;
+    always #5 clk = ~clk; // 100 MHz clock
 
-    always #5 clk = ~clk;
+    // Instantiate the DUT
+    main dut (
+        .clk(clk),
+        .rst(rst),
+        .btn_prev(btn_prev),
+        .btn_edge(btn_edge),
+        .LED(LED)
+    );
 
-    always @(posedge clk) begin
-        if (reset_counter < RESET_CYCLES) begin
-            rst <= 1;
-            reset_counter <= reset_counter + 1;
-        end else begin
-            rst <= 0;
-        end
-    end
-
-    // Initial block for simulation control and observation
     initial begin
-        $display("== TB: MAIN (Top) ==");
-        // Optionally assert and deassert reset here if main module doesn't already do so internally
-        // rst = 1;
-        // repeat (2) @(posedge clk);
-        // rst = 0;
-
-        // Run long enough to complete the FSM sequence in main
-        repeat (100) @(posedge clk);
-
-        // Print outputs (assuming main's psum_outs[0:5] are the interesting outputs)
-        $display("\n== TB: Final psum_outs ==");
-        for (int i = 0; i < 6; i++) begin
-            $display("psum_outs[%0d] = %0d (0x%h)", i, uut.psum_outs[i], uut.psum_outs[i]);
-        end
-
-        $finish;
-    end
-
-    // Optional: dump waveforms for viewing in sim
-    initial begin
-        $dumpfile("tb_main.vcd");
+        $display("Starting simulation...");
+        $dumpfile("waveform.vcd"); // for GTKWave
         $dumpvars(0, tb_main);
+
+        // Initialize inputs
+        rst = 1;
+        btn_prev = 0;
+        btn_edge = 0;
+
+        // Hold reset for a few cycles
+        repeat (5) @(posedge clk);
+        rst = 0;
+
+        // Wait for FSM to finish processing (simulate a few ms)
+        repeat (10000) @(posedge clk);
+
+        // Simulate user pressing the button to view results
+        btn_edge = 1;
+        @(posedge clk);
+        btn_edge = 0;
+        repeat (20) @(posedge clk)
+        repeat (10) begin
+            @(posedge clk);
+            btn_edge = 1;
+            @(posedge clk);
+            btn_edge = 0;
+            @(posedge clk);
+        end
+
+        // Finish
+        $display("Simulation finished.");
+        $finish;
     end
 
 endmodule
