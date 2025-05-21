@@ -12,7 +12,7 @@ import cv2
 import random
 from tensorflow.keras.datasets import mnist
 
-new_size = 6
+new_size = 24
 image_mem_file = "image_q7_8.mem"
 kernel_mem_file = "kernel_q7_8.mem"
 
@@ -36,12 +36,11 @@ image_q78 = binary_img.astype(np.float32)
 
 # Define kernel in float
 kernel_float = np.array([
-    [0, 1, 1, 1, 1, 0],
-    [1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1],
-    [0, 1, 1, 1, 1, 0]
+    [0, 1, 1, 0],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1],
+    [0, 1, 1, 0]
+
 ], dtype=np.float32)
 
 # Convert image and kernel to Q7.8 fixed-point (int16)
@@ -71,3 +70,128 @@ print(elementwise_q78)
 print("\n== Expected psum_outs[0..5] ==")
 for i, val in enumerate(columnwise_sum):
     print(f"psum_outs[{i}] = {val / 256:.3f} (Q7.8 hex: {q7_8_to_hex(val)})")
+
+import numpy as np
+import cv2
+import random
+from tensorflow.keras.datasets import mnist
+def print_image(img, title="Image"):
+    print(f"\n== {title} ==")
+    for row in img:
+        print(" ".join(str(int(v)) for v in row))
+
+def float_to_q7_8(val):
+    return np.int16(round(val * 256))  # Q7.8 fixed-point
+
+def q7_8_to_hex(val):
+    return f"{np.uint16(val):04x}"  # Convert to 16-bit hex
+
+# Settings
+block_size = 4
+stride = 4
+new_size = 24  # 8x8 image gives 4 blocks of 4x4
+
+# Load MNIST and preprocess
+(x_train, y_train), _ = mnist.load_data()
+idx = random.randint(0, len(x_train) - 1)
+image = x_train[idx]
+label = y_train[idx]
+print(f"Selected image index: {idx}, label: {label}")
+
+# Resize and binarize image
+resized = cv2.resize(image, (new_size, new_size), interpolation=cv2.INTER_NEAREST)
+_, binary_img = cv2.threshold(resized, 127, 1, cv2.THRESH_BINARY)
+image_q78 = binary_img.astype(np.float32)
+image_q78_int = np.vectorize(float_to_q7_8)(image_q78)
+
+# Original image (28x28, integer)
+print_image(image, title="Original MNIST Image")
+
+# Resized 8x8 image (after OpenCV resize)
+print_image(resized, title=f"Resized Image ({new_size}x{new_size})")
+
+# Binarized 8x8 image
+print_image(binary_img, title="Binarized Image (0/1)")
+
+# Write all 4x4 blocks into one .coe file
+output_vals = []
+
+for row in range(0, new_size - block_size + 1, stride):
+    for col in range(0, new_size - block_size + 1, stride):
+        block = image_q78_int[row:row + block_size, col:col + block_size]
+        for val in block.flatten():
+            output_vals.append(q7_8_to_hex(val))
+
+# Write .coe file with proper syntax
+with open("image_blocks.coe", "w") as f:
+    f.write("memory_initialization_radix=16;\n")
+    f.write("memory_initialization_vector=\n")
+
+    for i, val in enumerate(output_vals):
+        if i < len(output_vals) - 1:
+            f.write(f"{val},\n")
+        else:
+            f.write(f"{val};\n")
+
+
+# Print the kernel (float + hex)
+print("\n== Kernel (4x4) ==")
+kernel_float = np.array([
+    [0, 1, 1, 0],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1],
+    [0, 1, 1, 0]
+], dtype=np.float32)
+
+kernel_q78_int = np.vectorize(float_to_q7_8)(kernel_float)
+
+for row in kernel_q78_int:
+    float_row = [f"{val/256:.1f}" for val in row]
+    hex_row = [q7_8_to_hex(val) for val in row]
+    print("  ".join(f"{f} ({h})" for f, h in zip(float_row, hex_row)))
+
+
+# Print each 4x4 image block (float + hex)
+print("\n== Image Blocks (4x4, row-major) ==")
+block_id = 0
+for row in range(0, new_size - block_size + 1, stride):
+    for col in range(0, new_size - block_size + 1, stride):
+        block = image_q78_int[row:row + block_size, col:col + block_size]
+        print(f"\n-- Block {block_id} --")
+        for r in block:
+            float_row = [f"{val/256:.1f}" for val in r]
+            hex_row = [q7_8_to_hex(val) for val in r]
+            print("  ".join(f"{f} ({h})" for f, h in zip(float_row, hex_row)))
+        block_id += 1
+
+import numpy as np
+
+def float_to_q7_8(val):
+    return np.int16(round(val * 256))
+
+def q7_8_to_hex(val):
+    return f"{np.uint16(val):04x}"
+
+# Define 4x4 kernel (float)
+kernel_float = np.array([
+    [0, 1, 1, 0],
+    [1, 1, 1, 1],
+    [1, 1, 1, 1],
+    [0, 1, 1, 0]
+], dtype=np.float32)
+
+# Convert to Q7.8
+kernel_q78_int = np.vectorize(float_to_q7_8)(kernel_float)
+
+# Flatten in row-major order and convert to hex
+kernel_vals = [q7_8_to_hex(val) for val in kernel_q78_int.flatten()]
+
+# Write to kernel.coe
+with open("kernel.coe", "w") as f:
+    f.write("memory_initialization_radix=16;\n")
+    f.write("memory_initialization_vector=\n")
+    for i, val in enumerate(kernel_vals):
+        if i < len(kernel_vals) - 1:
+            f.write(f"{val},\n")
+        else:
+            f.write(f"{val};\n")
