@@ -3,11 +3,16 @@
 // Synthesizable, top-level module with a basic FSM and hardcoded image/kernel data.
 // No inputs/outputs. On reset, loads a 6x6 kernel and 6x6 image into a 12x14 PE grid.
 
-module main;
-
-    // Clock and reset
-    reg clk = 0;
-    reg rst = 1;
+module main (
+    input logic clk,
+    input logic rst,
+    input logic btn_prev,
+    input logic btn_edge,
+    output logic[15:0] LED
+);
+    //14 psum summer inputs-outputs
+    logic [15:0] tree_input [0:13];
+    logic [15:0] tree_sum;
 
     // PE grid connections
     reg  [15:0] image_val_vec [0:13];
@@ -25,12 +30,10 @@ module main;
     localparam int KERNEL_SIZE = 4;
     localparam int IMG_SIZE = 24;
 
-    // Example: image and kernel are all 1s for demonstration
-    logic [15:0] image_data  [0:IMG_W*IMG_H-1];
-    logic [15:0] kernel_data [0:IMG_W*IMG_H-1];
+
 
     // FSM state encoding
-    typedef enum logic [3:0] {
+    typedef enum logic [4:0] {
         S_RESET,
         S_BRAM_LOAD,
         S_BRAM_LWAIT,
@@ -39,9 +42,13 @@ module main;
         S_LOAD_KERNEL,
         S_WAIT_KERNEL,
         S_IMAGE_ROW,
+        S_PSUM_SUM,
         S_BRAM_WRITE,
         S_BRAM_WWAIT,
-        S_DONE
+        S_DONE,
+        S_IDLE,
+        S_RESULT_DELAY,
+        S_RESULT_SHOW
     } state_t;
     state_t state = S_RESET;
     int r, c;
@@ -58,40 +65,46 @@ module main;
         .psum_ins(psum_ins),
         .psum_outs(psum_outs)
     );
-
-    // Clock generation
-    always #5 clk = ~clk;
+    //initiate 14 tree adder
+    assign tree_input = psum_outs;
+        adder_tree_14 my_tree (
+            .in(psum_outs),
+            .sum(tree_sum)
+        );
 
     // Hardcoded image and kernel initialization (all 1s, change as needed)
 
     //BUNLAR ŞU ANLIK FIXED, NON-PARAMETERIZED
-    logic [11:0] imgaddr;
-    logic [5:0] resultsaddr;
-    logic [4:0] kerneladdr;
+    logic [14:0] imgaddr;
+    logic [14:0] resultsaddr;
+    logic [14:0] kerneladdr;
     ////////////////////////////////// BUNLAR KALABİLİR BÖYLE
-    logic [15:0] imgdout, kerneldout, resultsout, resultsin, next_idx;
+    logic [15:0] imgdout, kerneldout, resultsout, resultsin, resultsincopy, next_idx;
     logic [2:0] bram_delay;
     logic all_completed, delay_active;
     logic [5:0] index0, index1;
     logic [15:0] buffer [15:0];
     logic [15:0] kernelbuf [15:0];
-    logic [15:0] idx, idx1;
+    logic [15:0] idx, idx1, idx2, idx3;
     
-    blk_mem_gen_0 imagebram(
+    logic [15:0] result_read_index;
+    logic [1:0] result_delay_counter;
+
+    blk_mem_img imagebram(
     .clka(clk), // Clock signal
     .ena(1'b1), // Enable signal
     .wea(1'b0), // Write enable signal
     .addra(imgaddr), // Address input
-    .dina(1'b0), // Data input
+    .dina(16'b0), // Data input
     .douta(imgdout) // Data output
     );
     
-    kernel matrixbram(
+    blk_mem_kernel matrixbram(
     .clka(clk), // Clock signal
     .ena(1'b1), // Enable signal
     .wea(1'b0), // Write enable signal
     .addra(kerneladdr), // Address input
-    .dina(1'b0), // Data input
+    .dina(16'b0), // Data input
     .douta(kerneldout) // Data output
     );
  
@@ -105,18 +118,11 @@ module main;
     );
     
     
-    
-    initial begin
-        for (int i = 0; i < IMG_W*IMG_H; i = i + 1) begin
-            image_data[i] = 16'h0100;  // e.g. [1,2,3,...,36]
-            kernel_data[i] = 16'h0100;      // e.g. all 1s
-        end
-    end
+
         
 
     // Main FSM
     initial begin
-        rst = 1;
         valid_y = 0;
         bram_delay = 0;
         delay_active = 0;
@@ -124,14 +130,16 @@ module main;
         imgaddr = 0;
         idx = 0;
         idx1 = 0;
+        idx2 = 0;
+        idx3 = 0;
         index0 = 0;
         index1 = 0;
-        imgdout = 0;
         kerneldout = 0;
-        resultsout = 0;
         resultsin = 0;
         kerneladdr = 0;
         next_idx = 0;
+        result_read_index=0;
+        result_delay_counter=0;
         tag_row = 0;
         for (int i = 0; i < GRID_COLS; i++) begin
             image_val_vec[i] = 0;
@@ -145,9 +153,9 @@ module main;
         c = 0;
 
         repeat (2) @(posedge clk); // Allow reset to propagate
-        rst = 0;
         state = S_BRAM_LOAD;
         r = 0;
+        
 
 
 
@@ -157,12 +165,12 @@ module main;
             S_BRAM_LOAD: begin
                 if(index0 < 16) begin
                     if(!delay_active) begin
-                        imgaddr <= idx;
-                        idx <= idx + 1'b1;
+                        imgaddr <= idx;       
                         delay_active <= 1'b1;
                         state = S_BRAM_LWAIT;
                     end else if(delay_active) begin
                         buffer[index0] <= imgdout;
+                        idx <= idx + 1'b1;
                         index0 <= index0 + 1'b1;
                         delay_active <= 1'b0;  
                     end
@@ -205,7 +213,7 @@ module main;
             S_LOAD_KERNEL: begin
                 // Load one row of kernel weights
                 for (c = 0; c < IMG_W; c = c + 1)
-                    row_weight_vals[c] = kernelbuf[r*IMG_W + c];
+                    row_weight_vals[c] = kernelbuf[c];
                 for (c = IMG_W; c < GRID_COLS; c = c + 1)
                     row_weight_vals[c] = 0;
                 tag_row = r[3:0];
@@ -224,35 +232,75 @@ module main;
             end
             S_IMAGE_ROW: begin
                 for (c = 0; c < IMG_W; c = c + 1) begin
-                    image_val_vec[c] = 16'h0100;
+                    image_val_vec[c] = buffer[c];
                     valid_x_vec[c] = 1;
                 end
                 for (c = IMG_W; c < GRID_COLS; c = c + 1) begin
                     image_val_vec[c] = 0;
                     valid_x_vec[c] = 0;
                 end
-                state = S_DONE;
+                state = S_PSUM_SUM;
             end
-            S_BRAM_WRITE: begin
+            
+            S_PSUM_SUM: begin
+            
+                resultsincopy   <= tree_sum;
+                $display("Final 14-way Q7.8 sum: %d (hex: %h)", tree_sum, tree_sum);
+                state       <= S_BRAM_WRITE;
+            end
                 
-            
-            
-            
-            
+            S_BRAM_WRITE: begin
+                if(!delay_active) begin        
+                resultsaddr <= idx2;
+                idx2 <= idx2 + 1;
+                delay_active <= 1'b1;
+                state = S_BRAM_WWAIT;
+                end
+                else if(delay_active) begin
+                    resultsin <= resultsincopy;
+                    delay_active <= 0;
+                    state = S_DONE;
+                end
             end
             S_BRAM_WWAIT: begin
                 bram_delay += 1;
                 if(bram_delay == 2'd3) begin
                     state = S_BRAM_WRITE;
+                    index0 <= 1'b0;
                     bram_delay <= 0;   
                 end                  
             end
             S_DONE: begin
-                // Remain in done state; for simulation, you could $finish here
-                // but for synthesis, just idle
-                // For demo, can route output to chipscope/ILA, etc.
-                state = S_DONE;
+                idx3 <= idx3 + 1;
+                if(idx3 > 16'd36)
+                state = S_IDLE;
+                else if(idx3 < 16'd36)
+                state = S_BRAM_LOAD;
             end
+            S_IDLE: begin
+                LED <= 16'd1;
+                if (btn_edge && result_read_index < 36) begin
+                    resultsaddr <= result_read_index;
+                    result_delay_counter <= 0;
+                    state <= S_RESULT_DELAY;
+                end
+            end
+            
+            S_RESULT_DELAY: begin
+                result_delay_counter <= result_delay_counter + 1;
+                if (result_delay_counter == 3) begin // Wait for BRAM latency
+                    state <= S_RESULT_SHOW;
+                end
+            end
+            
+            S_RESULT_SHOW: begin
+                LED <= resultsout;
+                if(btn_edge)begin
+                result_read_index <= result_read_index + 1;
+                state <= S_IDLE;
+                end
+            end 
+        
             default: state = S_DONE;
             endcase
         end
