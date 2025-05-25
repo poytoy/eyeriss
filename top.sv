@@ -17,12 +17,12 @@ module main (
     output logic LED17_R, LED17_G, LED17_B   // RGB LED 17
 );
 
-    //BUNLAR ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾U ANLIK FIXED, NON-PARAMETERIZED
+
     logic [14:0] imgaddr;
     logic [14:0] resultsaddr;
     logic [14:0] kerneladdr;
     logic [3:0] addr_hex0, addr_hex1, pc_hex0, pc_hex1, pc_hex2, pc_hex3;
-    ////////////////////////////////// BUNLAR KALABÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°LÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°R BÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¯ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½-YLE
+
     logic [15:0] imgdout, kerneldout, resultsout, resultsin, resultsincopy, next_idx;
     logic [2:0] bram_delay;
     logic all_completed, delay_active, btn_prev, rst, btn_edge, next_flag;
